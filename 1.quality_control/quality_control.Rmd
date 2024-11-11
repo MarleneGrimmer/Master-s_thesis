@@ -1,0 +1,95 @@
+---
+title: "Quality Control"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float: true
+  html_notebook: 
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+---
+
+```{r, include=FALSE}
+library(readr)
+library(ggplot2)
+library(dplyr)
+load("~/Uni/11.masters_thesis/quality_assessment/qa.RData")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, results = 'hide', echo = FALSE) 
+```
+
+Quality control of 476 *Streptococcus mutans* genomes.
+
+----
+
+## CheckM
+
+CheckM assesses the parameters genome completeness and genome contamination. According to its inbuilt marker lineages, `r sum(checkm_out$"Marker lineage"=="o__Lactobacillales (UID544)")` genomes were classified as "`r sort(unique(checkm_out$"Marker lineage"), decreasing = TRUE)[1]`," while `r sum(checkm_out$"Marker lineage"=="k__Bacteria (UID203)")` genome could not be classified further than "`r sort(unique(checkm_out$"Marker lineage"), decreasing = TRUE)[2]`." Genomes with completenss less than 90% and/or contamination larger than 5% were deemed "poor quality" and excluded from further analysis:
+
+```{r checkm, fig.height=7, fig.width=7, out.height='40%', out.width='40%', fig.align='center'}
+ggplot(checkm_out, aes(x = Completeness, y = Contamination)) +
+  geom_point(size = 0.5) +
+  scale_y_reverse() +  # Invert the y-axis
+  labs(title = "Genome Completeness vs. Contamination",
+       x = "Completeness (%)",
+       y = "Contamination (%)") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +  # Center the title
+  geom_hline(yintercept = 5, linetype = "dashed", color = "red") +  # horizontal line at contamination = 5%
+  geom_vline(xintercept = 90, linetype = "dashed", color = "red")   # vertical line at completeness = 90%
+```
+According to these parameters `r sum(checkm_out$Completeness < 90)` genomes were excluded based on completeness and `r sum(checkm_out$Contamination > 5)` based on contamination.
+
+----
+
+## GTDB-Tk
+Taxonomic classification of all genomes:
+All genomes were classified as `r unique(gtdbtk_trimmed$classification)`
+
+----
+
+## QUAST
+Assessment of genome size, number of contigs per genome, and N50 (fraction of contigs that combine to be more than 50% of the genome).
+
+```{r quast, fig.height=7, fig.width=7, out.height='40%', out.width='40%', fig.show="hold"}
+ggplot(quast_results, aes(x = `Total length`, y = N50)) + geom_point(size = 0.5) +
+  labs(title = "Genome size vs. N50",
+       x = "Genome size (bp)",
+       y = "N50") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  theme(plot.title = element_text(hjust = 0.5)) +  # Center the title
+  geom_hline(yintercept = 20000, linetype = "dashed", color = "red") +  # horizontal line at contamination = 5%
+  geom_vline(xintercept = 1500000, linetype = "dashed", color = "red")   # vertical line at completeness = 90%
+
+ggplot(quast_results, aes(x=contigs)) + geom_histogram(col = "black", fill = "black",
+                                                       binwidth = 5) +
+  labs(title = "Total number of contigs per genome",
+       x = "",
+       y = "Count") +
+  theme_light() +  # Set white background
+  theme(plot.title = element_text(hjust = 0.5)) +   #title in the middle
+  scale_x_continuous(expand = c(0, 0), limits = c(0, 470)) +    #0,0 in the bottom left
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 60)) +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+`r sum(quast_results$"Total length"<1500000)` genome with a size lower than 1.5 Mb and `r sum(quast_results$N50<20000)` genomes with a N50 value lower than 20,000 were excluded from further analysis.
+
+----
+
+In total `r length(all_bad)` genomes were exluded from further analysis based on these parameters.
