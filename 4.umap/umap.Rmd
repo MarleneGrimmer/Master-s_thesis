@@ -1,0 +1,188 @@
+---
+title: "GCF clustering and UMAP"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float: true
+  html_notebook: 
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(Seurat)
+library(Signac)
+library(clustree)
+library(knitr)
+library(kableExtra)
+load("~/Uni/11.masters_thesis/umap/umap.RData")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
+```
+Following BGC detection and annotation, all antiSMASH and GECCO BGCs were aggregated with experimentally validated BGCs from the Minimum Information about a Biosynthetic Gene cluster (MIBiG) database (MIBiG version 3.1). This resulted in a total set of 9059 BGCs, which were clustered into 1640 Gene Cluster Families (GCFs). 
+
+To explore and visualise the relationships between the identified GCFs, dimensionality reduction was performed using the graph-based Uniform Manifold Approximation and Projection (UMAP) tool.
+
+## Clustree
+Shows the relationship between clusterings at different resolutions.
+```{r clustree, fig.width = 10, fig.height = 12, fig.align='center'}
+clustree(smutans_tree@meta.data, prefix = "peaks_snn_res.", highlight_core = TRUE)
+```
+The resolution was set to 0.5, resulting in 9 clusters.
+
+## UMAPs
+### Seurat clusters
+```{r clusters, fig.width = 10.5, fig.height = 7, fig.align='center'}
+DimPlot(object = smutans, label = FALSE, pt.size = 2) +
+  labs(title = "Seurat Clusters") +
+  theme(plot.title = element_text(hjust = 0.5, size = 24),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "right",
+        legend.text = element_text(size = 20),
+        axis.title=element_text(size=18))
+```
+
+```{r, fig.width = 10.5, fig.height = 7, fig.align='center'}
+require(plotly)
+require(scales)
+temp1 <- RunUMAP(object = smutans, dims = 1:30, n.components = 3,
+                 verbose = F, reduction='lsi')
+df_3D <- data.frame(umap1 = temp1@reductions$umap@cell.embeddings[, 1], 
+                 umap2 = temp1@reductions$umap@cell.embeddings[, 2],
+                 umap3 = temp1@reductions$umap@cell.embeddings[, 3], cell = Idents(temp1))
+plot_ly(df_3D, x = ~umap1, y = ~umap2, z = ~umap3, color = ~cell,
+        colors = hue_pal()(length(levels(df_3D$cell))), marker = list(size = 3)) %>% 
+  add_markers() %>%
+  layout(scene = list(xaxis = list(title = "umap 1", showticklabels=FALSE), 
+                      yaxis = list(title = "umap 2", showticklabels=FALSE),
+                      zaxis = list(title = "umap 3", showticklabels=FALSE)))
+```
+Some of the clusters that seemed to overlap in the 2D UMAP are more separated in the 3D version (e.g. cluster 3).
+
+### Class
+```{r class, fig.width = 10.5, fig.height = 7, fig.align='center'}
+DimPlot(object = smutans, label = FALSE, group.by = "class", pt.size = 2,
+        cols = c("mixed" = "#EE8866", "NRPS" = "#EEDD88", "PKS" = "#44BB99", 
+                 "RiPP" = "#99DDFF", "saccharide" = "#77AADD", 
+                 "terpene" = "#BBCC33", "unknown" = "#FFAABB")) +
+  labs(title = "Biosynthetic Class") +
+  theme(plot.title = element_text(hjust = 0.5, size = 24),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "right",
+        legend.text = element_text(size = 20),
+        axis.title=element_text(size=18))
+  
+kbl(table(smutans$class, smutans$seurat_clusters)) %>%
+  kable_paper(bootstrap_options = "striped", full_width = F)
+```
+There is considerable overlap between the assigned Seurat clusters and the predicted biosynthetic class. This suggests that the biosynthetic class is a good parameter for cluster similarity.
+
+### Cluster Length
+```{r clonability, fig.width = 10.5, fig.height = 7}
+DimPlot(object = smutans, label = FALSE, pt.size = 2,
+        group.by = "cluster_length", 
+        cells.highlight = which(smutans$cluster_length>20000), cols.highlight = "#004488",
+        sizes.highlight = 2) + NoLegend() + ggtitle("Clusters with a length > 20 Kbp")
+```
+
+### Method
+```{r method, fig.width = 10.5, fig.height = 7, fig.align='center'}
+DimPlot(object = smutans, label = FALSE, group.by = "GCF_method", pt.size = 2) + 
+  scale_color_manual(values = c(Gecco = "#228833", antiSMASH = "#EE6677", MIBiG = "#004488", mixed = "#AA3377")) +
+  labs(title = "BGC detection method") +
+  theme(plot.title = element_text(hjust = 0.5, size = 24),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        legend.position = "right",
+        legend.text = element_text(size = 20),
+        axis.title=element_text(size=18))
+```
+MIBiG = GCF contains at least one MIBiG BGC -> known function  
+mixed = does not contain any MIBiG BGCs, but both GECCO and antiSMASH  
+GECCO/antiSMASH = exclusively contains BGCs detected with that method  
+<br>
+Almost all clusters contain at least one MIBiG BGC. Only 33 don't.
+```{r method_table, fig.align='center'}
+kbl(table(smutans$GCF_method), col.names = c("Method", "freq")) %>%
+  kable_paper(bootstrap_options = "striped", full_width = F, position = "float_right")
+```
+
+Most of the GCFs were classified as “MIBiG” GCFs, indicating the presence of least one BGC from the validated database. The vast majority of those (1600/1640, 97.6%) contained exclusively MIBiG databse BGCs, while seven contained BGCs from both the MIBiG database and those identified by GECCO or antiSMASH in *S. mutans* genomes.
+
+## table with mibig+smutans
+
+```{r mibig_mixed}
+kable(mixed_GCFs)
+```
+
+
+## Clusters with no MIBiG BGCs
+In total, the 6557 BGCs identified by GECCO and antiSMASH were contained within 40 GCFs. Among these 40 were the 21 largest GCFs overall, collectively containing 2265 of all detected *S. mutans* BGCs. Notably, ten of the 40 GCFs contained only a single BGC each. Of the 40 GCFs, 33 were not classified as “MIBiG” GCFs. These 33 GCFs were composed of BGCs found exclusively by GECCO (7), by antiSMASH (8), or by both tools (18). 
+
+
+```{r novel_1}
+kable(table(subset(smutans, GCF_method != "MIBiG")$seurat_clusters, subset(smutans, GCF_method != "MIBiG")$class))
+```
+
+```{r novel_2, fig.width = 10.5, fig.height = 7}
+DimPlot(object = smutans, label = FALSE, pt.size = 2,
+        cells.highlight = which(smutans$GCF %in% novelGCFs), cols.highlight = "#004488",
+        sizes.highlight = 2) + NoLegend() + ggtitle("Novel GCFs")
+```
+
+### GCF0000084
+```{r GCF0000084, fig.width = 10.5, fig.height = 7}
+DimPlot(object = smutans, label = FALSE, pt.size = 2,
+        cells.highlight = which(smutans$GCF=="GCF0000084"), cols.highlight = "#004488",
+        sizes.highlight = 2) + NoLegend() + ggtitle("GCF0000084")
+```
+This GCF (GCF0000084) was investigated further and discivered to be a putative Blp family class II bacteriocin.
+
+Almost half of the novel GCFs (14/33) are in Cluster 5. The Cluster itself includes 123 GCF.
+```{r}
+set1 <- subset(smutans@meta.data, GCF_method != "MIBiG"&seurat_clusters==5)[,c(23,24,26,28)]
+set1$GCF_rep <- rownames(set1)
+set2 <- as.data.frame(table(non_mibig_5$GCF))
+colnames(set2) <- c("GCF", "Number of BGCs")
+kable(merge(set1, set2, by = "GCF"), all.x = TRUE)
+```
+
+```{r, fig.width = 10.5, fig.height = 7}
+DimPlot(object = smutans, label = FALSE, group.by = "GCF",
+        cells.highlight = which(smutans$GCF %in% unique(non_mibig_5$GCF)),
+        cols.highlight = "blue", pt.size = 2) + NoLegend() + ggtitle("GCFs in Cluster 5 that do not contain a MIBiG BGC")
+```
+
+#### Strain GCA_019048645
+-> orderable type strain
+```{r, fig.width = 10.5, fig.height = 7}
+DimPlot(object = smutans, label = FALSE, group.by = "GCF",
+        cells.highlight = which(smutans$BGC %in% GCA_019048645_BGCs_novel),
+        cols.highlight = "blue", pt.size = 2) + NoLegend() + ggtitle("novel GCFs that contain a BGC from strain GCA_019048645")
+
+kable(subset(novel_GCFs, genome == "GCA_019048645")[,c(1,3,5,6,7)])
+```
+Number of BGCs in each GCF (novel GCF that includes at least one BGC from the genome GCA_019048645):
+```{r, results='markup'}
+for(i in GCA_019048645_GCFs){
+  print(paste(i,": ", sum(clusters$gcf_id == i)))
+}
+```
+
+
+
+
+
+
+
