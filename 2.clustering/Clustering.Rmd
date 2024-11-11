@@ -1,0 +1,173 @@
+---
+title: "BGC and GCF Clustering"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float: true
+  html_notebook: 
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+---
+```{r setup, include=FALSE} 
+library(ggplot2)
+library(phytools)
+library(ggtree)
+library(ggtreeExtra)
+library(knitr)
+library(dplyr)
+load("~/Uni/11.masters_thesis/Clustering/clustering.RData")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE) 
+```
+
+Two tools were used to detect biosynthetic gene clusters in the 458 *streptococcus mutans* genomes.
+
+----
+
+## BGC Clustering using GECCO and antiSMASH
+### Biosynthetic classes
+The two BGC detection tools GECCO and antiSMASH found `r length(gecco_bgcs$cluster_id)` and `r length(antismash_info$"File Name")` respectively and assigned them into the classes ribosomally synthesised and post-translationally modified peptides (RiPPs), non- ribosomal peptides (NRPs), and polyketides (PKS). The majority of BGCs were identified as RiPPs.
+
+```{r classes, fig.height=7, fig.width=7, out.height='50%', out.width='50%', fig.show="hold"}
+# antiSMASH
+ggplot(antismash_info, aes(x = factor(`Protocluster Classes`, 
+                                      level = c("NRP", "PKS", "RiPP", "mixed", "other")))) + 
+  geom_bar(fill = "#AA0000") +
+  labs(title = "BGC classes predicted by antiSMASH",
+       y = "Number of BGCs",
+       x = "") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2, size = 6) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 2600))
+
+# GECCO
+ggplot(gecco_bgcs, aes(x = factor(`Protocluster Classes`, 
+                                  level = c("NRP", "PKS", "RiPP", "mixed", "other")))) +
+  geom_bar(fill = "#5A7E33") +
+  labs(title = "BGC classes predicted by GECCO",
+       y = "Number of BGCs",
+       x = "") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2, size = 6) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 2600))
+
+```
+
+### Number of BGCs per genome
+```{r tree, fig.height=7, fig.width=7, out.height='50%', out.width='50%', fig.align='center'}
+ggtree(rerooted_outgroup_droptip) + 
+  geom_treescale(x = 0.005, y = 0, fontsize = 3) +
+  geom_facet(panel = "GECCO", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = GECCO, fill = "GECCO"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  geom_facet(panel = "antiSMASH", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = antiSMASH, fill = "antiSMASH"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  geom_facet(panel = "total BGCs", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = totalBGCs, fill = "totalBGCs"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  scale_fill_manual(values = c("GECCO" = "#5A7E33", "antiSMASH" = "#AA0000", "totalBGCs" = "black")) +
+    theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, size = 20),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=18),
+        strip.text.x = element_text(size = 16)) +
+  ggtitle("Number of BGCs detected per genome by each method")
+```
+The number of of BGCs is relatively evenly distributed across all genomes. Some have visibly more than others, but there are no extreme outliers. Both methods also seem to follow the same trends, meaning if for example GECCO indentifies a lot of BGCs, so does antiSMASH.
+
+### Aggregation with MIBiG BGCs
+
+To cluster the BGCs furhter into gene cluster families (GCFs), `r length(mibig_info$"File Name")` validated BGCs from the MIBiG database were included for comparison purposes.
+
+```{r stacked, fig.height=7, fig.width=9, out.height='50%', out.width='50%', fig.show="hold"}
+# MIBiG
+ggplot(mibig_info, aes(x = `Protocluster Classes`)) + 
+  geom_bar(fill = "#2A4765") +
+  labs(title = "BGC classes of validated MIBiG BGCs",
+       y = "Number of BGCs",
+       x = "") +
+  theme_light() +
+  theme(axis.text=element_text(size=12),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# colored by method
+ggplot(BGC_classes, aes(x = `Protocluster Classes`, fill = method)) + 
+  geom_bar() +
+  scale_fill_manual(values=c("#AA0000", "#5A7E33", "#2A4765")) +
+  labs(title = "BGC classes",
+       y = "Number of BGCs", x = "",
+       fill = "Method") +
+  theme_light() +
+  theme(axis.text=element_text(size=12),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+----
+
+## Gene cluster families
+
+The set of `r length(htgcf$cluster_id)` BGCs were clustered into `r length(unique(htgcf$gcf_id))` GCFs.
+
+```{r gcf, fig.height=7, fig.width=7, out.height='50%', out.width='50%', fig.show="hold"}
+# cluster length
+ggplot(htgcf, aes(x = `cluster_length`)) + 
+  geom_histogram(fill = "#2A4765", binwidth = 10000) +
+  labs(title = "Cluster length",
+       y = "Number of BGCs", x = "Cluster length") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# BGCs per GCF
+ggplot(count_gcf, aes(x = gcf_id, y = cluster_count)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Number of BGCs per GCF",
+       x = "",
+       y = "Number of BGCs") +
+  theme_light() +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18),
+        axis.text.x=element_blank(), #remove x axis labels
+        axis.ticks.x=element_blank(),
+        panel.grid.major = element_blank(),  # remove major grid lines
+        panel.grid.minor = element_blank()) +  # remove minor grid lines
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(n.breaks = 10)
+
+
+```
+
+Cluster length describes how many base pairs the GCF is on average. Most GCFs are around 20,000 bp.
+The distribution of BGCs per GCF shows that most (`r sum(count_gcf$cluster_count<10)`) GCFs contain less than 10 BGCs with only `r sum(count_gcf$cluster_count>100)` containing more than 100 and `r sum(count_gcf$cluster_count>1000)` over 1000.
+
+```{r table}
+ordered_table <- count_gcf %>%
+  filter(cluster_count > 100) %>%
+  arrange(cluster_count)
+
+kable(ordered_table)
+```
+
+
+
+
+
