@@ -1,0 +1,169 @@
+---
+title: "Metadata and Phylogeny"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float: true
+  html_notebook: 
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+---
+
+```{r, include=FALSE}
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(countrycode)
+library(ggnewscale)
+library(ape)
+library(phytools)
+library(ggtree)
+library(ggtreeExtra)
+library(knitr)
+load("~/Uni/11.masters_thesis/metadata_phylogeny/phylogeny.RData")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
+```
+
+---
+
+## Metadata analysis
+
+For each of 476 analysed *S. mutans* genomes, the corresponding NCBI BioSample record (i.e., metadata record) was retrieved using the NCBI Batch Entrez function.
+
+Most attributes are NA for most genomes. After removing all columns with >= 300 NAs, 11 attributes are left:
+```{r, echo=FALSE}
+colnames(metadata)
+```
+Different spellings and specifications were grouped together (e.g. caries/carious -> caries) and data that was "unrealistic" (e.g., dates like 2100) or samples that included more than one date (mostly cohort studies that listed beginning and end of study) are listed as NA.
+
+### Geographic location
+```{r location, fig.height=10, fig.width=15, fig.align='center'}
+ggplot(metadata, aes(x = `geographic location`, fill = continent)) + 
+  geom_bar(stat = "count") +
+  theme_light() +
+  labs(title = "Geographic distribution",
+       x = "",
+       y = "Number of genomes",
+       fill = "Continent") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2, size = 4) +
+  scale_x_discrete(guide = guide_axis(angle = 45)) +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18))
+```
+The largest number of genomes were isolated in the Americas (193) and Asia (151) with Japan, Brazil, and the USA as the three countries with the most individual isolates.
+
+### Host discease
+```{r disease, fig.height=10, fig.width=13, fig.align='center'}
+ggplot(metadata, aes(x = `host disease`, fill = `host disease`)) + 
+  geom_bar(show.legend = FALSE) +
+  theme_light() +
+  labs(title = "Host disease",
+       y = "Number of genomes",
+       x = "") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2, size = 4) +
+  scale_x_discrete(guide = guide_axis(angle = 45)) +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18))
+```
+ 
+### Isolation source
+```{r source, fig.height=10, fig.width=13, fig.align='center'}
+ggplot(metadata, aes(x = `isolation source`, fill = `isolation source`)) +
+  geom_bar(show.legend = FALSE) +
+  theme_light() +
+  labs(title = "Isolation source", x = "") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(guide = guide_axis(angle = 45)) +
+  geom_text(aes(label = after_stat(count)), stat = "count", vjust = -0.2, size = 4) +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18))
+```
+
+### Collection date
+```{r date, fig.height=10, fig.width=15, fig.align='center'}
+colfunc <- colorRampPalette(c("#e8ffff", "#000137"))
+ggplot(metadata, aes(x = `collection date`, fill = `collection date`)) +
+  geom_bar(show.legend = FALSE) +
+  theme_light() +
+  labs(title = "Collection date",
+       y = "Count",
+       x = "") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(guide = guide_axis(angle = 45)) +
+  scale_fill_manual(values = colfunc(36)) +
+  theme(axis.text=element_text(size=16),
+        plot.title=element_text(size=24),
+        axis.title=element_text(size=18))
+```
+
+--------------------------------------------------------------------------------
+
+## Phylogeny construction
+
+For the pan-genome analysis, the *S. mutans* genomes were annotated using the prokaryotic annotation tool Prokka. Subsequently, a pan-genome was constructed using the graph-based pan-genome clustering tool Panaroo. For this purpose, the assembled complete genome of *Streptococcus troglodytae* was included as an outgroup. The JSpecies Web Server was used to calculate average nucleotide identity (ANI) values between several closely related Streptococcus species representative genomes based on the Genome Taxonomy Database (GTDB) phylogeny. *Streptococcus troglodytae* (NCBI GenBank Assembly GCA_002355215.1) had the highest ANI value relative to *S. mutans* (NCBI RefSeq assembly GCA_019048645.1), with 94.57%, leading to its inclusion as the outgroup. 
+
+```{r outgroup}
+kable(ANIb)
+```
+Subsequently, with the resulting core genome alignment as input, a phylogenetic tree was constructed using IQ-TREE.
+```{r tree, fig.height=5, fig.width=7, fig.align='center'}
+ggtree(rerooted_outgroup_droptip) + 
+  geom_treescale(x = 0.005, y = 0, fontsize = 3)
+```
+
+### Number of BGCs per genome
+```{r BGCs_per_genome, fig.height=7, fig.width=10, fig.align='center'}
+ggtree(rerooted_outgroup_droptip) + 
+  geom_treescale(x = 0.005, y = 0, fontsize = 3) +
+  geom_facet(panel = "GECCO", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = GECCO, fill = "GECCO"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  geom_facet(panel = "antiSMASH", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = antiSMASH, fill = "antiSMASH"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  geom_facet(panel = "total BGCs", data = BGCS_per_genome, 
+             geom = geom_col, aes(x = totalBGCs, fill = "totalBGCs"), 
+             color = NA, size = 0, width = 1, orientation = 'y') +
+  scale_fill_manual(values = c("GECCO" = "#5A7E33", "antiSMASH" = "#AA0000", "totalBGCs" = "black")) +
+    theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5, size = 24),
+        axis.text=element_text(size=16),
+        axis.title=element_text(size=18),
+        strip.text.x = element_text(size = 20)) +
+  ggtitle("Number of BGCs detected per genome by each method")
+```
+
+### Addition of metadata
+```{r metadata, fig.height=7, fig.width=10, fig.align='center'}
+ggtree(rerooted_outgroup_droptip) + 
+  geom_treescale(x = 0.005, y = 0, fontsize = 3) + 
+  geom_fruit(data = metaphylogeny, geom = geom_tile,
+             mapping = aes(x = 1, y = genome, fill = continent), width = 0.001,
+             offset = 0.051, pwidth = 0.05) + 
+  scale_fill_viridis_d(option = "D", name="Continent", na.value = "white") + new_scale_fill() +
+  geom_fruit(data = metaphylogeny, geom = geom_tile,
+             mapping = aes(x = 1, y = genome, fill = `isolation source`), 
+             width = 0.001) +
+  scale_fill_viridis_d(option = "A", name="Isolation source", na.value = "white") + new_scale_fill() +
+  geom_fruit(data = metaphylogeny, geom = geom_tile,
+             mapping = aes(x = 1, y = genome, fill = `host disease`), 
+             width = 0.001) +
+  scale_fill_viridis_d(option = "H", name="Host disease", na.value = "white")
+```
+
+
+
+
+
+
+
+
